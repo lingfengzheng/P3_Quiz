@@ -214,111 +214,37 @@ exports.editCmd = (rl, id) => {
  * @param rl    Objeto readline usado para implementar el CLI.
  * @param id Clave del quiz a probar.
  */
-exports.testCmd = (rl, id) => {
+exports.testCmd = (rl,id) =>  {
+
+
     validateId(id)
         .then(id => models.quiz.findById(id))
-.then(quiz => {
-        if (!quiz) {
-        throw new Error(`No existe un quiz asociado al id=${id}.`);
-    }
-    return makeQuestion(rl, quiz.question + '？ ')
-        .then(a => {
-        if (limpia(a) === limpia(quiz.answer)) {
-        log('Su respuesta es correcta.');
-        biglog('Correcta', 'green');
-    } else {
-        log('Su respuesta es incorrecta.');
-        biglog('Incorrecta', 'red');
-    }
-});
-})
-.catch(error => {
-        errorlog(error.message);
-})
-.then(() => {
-        rl.prompt();
-})
-};
+        .then(quiz => {
+            if(!quiz) {
+                throw new Error(`No existe un quiz asiciado al id=${id}.` );
+            }
 
+            return makeQuestion(rl, quiz.question+"?")
+                .then(answer => {
+                    if(answer.toLowerCase().trim() === quiz.answer.toLowerCase().trim()) {
+                        log("Respuesta correcta");
+                    } else {
+                        log("Respuesta incorrecta");
+                    }
+                })
 
-/**
- * Función que carga los índices de elementos de quiz en un array.
- *
- * @param text  Array de índices
- * @param id    Índices de elementos
- * @returns {*}
- */
-const settingUp = (text) => {
-    return new Sequelize.Promise((resolve, reject) => {
-        models.quiz.findAll()
-        .each(quiz => {
-        text.push(quiz.id);
-})
-.then(() => {
-        resolve(text);
-})
-})
-};
+        })
 
-
-/**
- * Función que devuelve un índice aleatorio dentro del array que pasa como parámetro.
- * @param id    Índice aleatorio.
- * @param text  Array de índices.
- * @returns {*}
- */
-const aleatorio = (id, text) => {
-    return new Sequelize.Promise((resolve, reject) => {
-        id = text[Math.floor(Math.random() * text.length)];
-    text.splice(text.indexOf(id), 1);
-    resolve(id);
-})
-};
-
-
-/**
- * El bucle que reaiza con la función de play.
- *
- * @param id    Índice del quiz a realizar.
- * @param text  Array que almacena los índices de quizzes pendientes.
- * @param rl    Objeto readline usado para implementar el CLI.
- * @param score Nota obtenida hasta momento.
- * @returns {*}
- */
-const bucle = (id, text, rl, score) => {
-    return new Sequelize.Promise((resolve, reject) => {
-        aleatorio(id, text)
-        .then(a => {
-        validateId(a)
-        .then(id => models.quiz.findById(id))
-.then(quiz => {
-        return makeQuestion(rl, quiz.question + '? ')
-            .then(a => {
-            if (limpia(a) === limpia(quiz.answer)) {
-        score += 1;
-        log(`CORRECTO - Lleva ${score} aciertos.`);
-        if (text.length !== 0) {
-            bucle(id, text, rl, score);
-            resolve();
-        } else {
-            log('No hay nada más que preguntar.');
-            log(`Fin del juego. Aciertos: ${score}`);
-            biglog(`${score}`, `magenta`);
+        .catch(error => {
+            errorlog(error.mesage);
+        })
+        .then(() => {
             rl.prompt();
-            resolve();
-        }
-    } else {
-        log('INCORRECTO.');
-        log(`Fin del juego. Aciertos: ${score}`);
-        biglog(`${score}`, `magenta`);
-        rl.prompt();
-        resolve();
-    }
-})
-})
-})
-})
+        });
+
 };
+
+
 
 /**
  * Pregunta todos los quizzes existentes en el modelo en orden aleatorio.
@@ -327,19 +253,50 @@ const bucle = (id, text, rl, score) => {
  * @param rl    Objeto readline usado para implementar el CLI.
  */
 exports.playCmd = rl => {
-
-    let toBeResolved = [];
     let score = 0;
-    let id;
+    let toBePlayed = [];
 
-    settingUp(toBeResolved)
+    const playOne = () => {
+
+        return Promise.resolve()
+            .then (() => {
+                if (toBePlayed.length <= 0) {
+                    console.log("Fin del Juego");
+                    return;
+                }
+                let pos = Math.floor(Math.random() * toBePlayed.length);
+                let quiz = toBePlayed[pos];
+                toBePlayed.splice(pos, 1);
+
+                return makeQuestion(rl, quiz.question)
+                    .then(answer => {
+                        if(answer.toLowerCase().trim() === quiz.answer.toLowerCase().trim()) {
+                            score++;
+                            log(socket,'Resuesta correcta', 'green');
+                            return playOne();
+                        } else {
+                            console.log("Respuesta incorrecta");
+                        }
+                    })
+            })
+    }
+
+    models.quiz.findAll({raw: true})
+        .then(quizzes => {
+            toBePlayed = quizzes;
+        })
         .then(() => {
-        bucle(id, toBeResolved, rl, score);
-})
-.catch(error => {
-        errorlog(error.message);
-})
+            return playOne();
+        })
+        .catch(e => {
+            console.log("error: " + e);
+        })
+        .then(() => {
+            console.log(score);
+            rl.prompt();
+        })
 };
+
 
 
 /**
@@ -364,18 +321,3 @@ exports.quitCmd = rl => {
 };
 
 
-/**
- *  Limpiar la entrada para hacerle case non-sensitive.
- *
- *  @param comp String de entrada.
- */
-limpia = comp => {
-    comp = comp.replace(/\s+/g, '');
-    comp = comp.toLowerCase();
-    comp = comp.replace(/á/gi, "a");
-    comp = comp.replace(/é/gi, "e");
-    comp = comp.replace(/í/gi, "i");
-    comp = comp.replace(/ó/gi, "o");
-    comp = comp.replace(/ú/gi, "u");
-    return comp;
-};
